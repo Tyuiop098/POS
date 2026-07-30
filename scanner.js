@@ -57,25 +57,27 @@ if(requireRoleOrRedirect('scanner')){
         return;
       }
 
-      // not found locally -> try public barcode database for the NAME
-      showToast('กำลังค้นหาชื่อสินค้า...', '');
-      const off = await lookupOpenFoodFacts(code);
-      openUnknownModal(code, off ? off.name : '', !!off);
+      // not found locally -> search public product databases for NAME and (if lucky) a suggested PRICE
+      showToast('กำลังค้นหาชื่อและราคาสินค้า...', '');
+      const ext = await lookupExternalProduct(code);
+      openUnknownModal(code, ext ? ext.name : '', ext ? ext.price : null, !!ext);
 
     }catch(e){
       showToast('เกิดข้อผิดพลาด ลองใหม่อีกครั้ง', 'err');
     }
   }
 
-  function openUnknownModal(barcode, prefilledName, foundName){
+  function openUnknownModal(barcode, prefilledName, prefilledPrice, found){
     const modal = document.getElementById('unknownModal');
-    document.getElementById('umTitle').textContent = foundName ? 'พบชื่อสินค้า — กรอกราคา' : 'ไม่พบสินค้านี้ในระบบ';
-    document.getElementById('umHint').textContent = foundName
-      ? 'ดึงชื่อสินค้าจากฐานข้อมูลสาธารณะแล้ว กรุณาใส่ราคาเพื่อบันทึก'
+    document.getElementById('umTitle').textContent = found ? 'พบข้อมูลสินค้า — ตรวจสอบก่อนบันทึก' : 'ไม่พบสินค้านี้ในระบบ';
+    document.getElementById('umHint').textContent = found
+      ? (prefilledPrice != null
+          ? 'ดึงชื่อและราคาแนะนำจากฐานข้อมูลสาธารณะแล้ว กรุณาตรวจสอบก่อนบันทึก'
+          : 'ดึงชื่อสินค้าจากฐานข้อมูลสาธารณะแล้ว กรุณาใส่ราคาเพื่อบันทึก')
       : 'กรอกชื่อสินค้าและราคาเพื่อบันทึกไว้ใช้ครั้งต่อไป';
     document.getElementById('umBarcode').value = barcode;
     document.getElementById('umName').value = prefilledName || '';
-    document.getElementById('umPrice').value = '';
+    document.getElementById('umPrice').value = (prefilledPrice != null) ? prefilledPrice : '';
     document.getElementById('umErr').style.display = 'none';
     modal.style.display = 'flex';
     document.getElementById('umPrice').focus();

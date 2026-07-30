@@ -96,13 +96,14 @@ if(requireRoleOrRedirect('cashier')){
     if(product){
       await addToCart(code, product.name, product.price, 1);
       input.value = '';
-    } else {
-      openProductModal({ barcode: code, name:'', price:'' }, async (barcode, name, price)=>{
-        await saveProduct(barcode, name, price);
-        await addToCart(barcode, name, price, 1);
-      });
-      input.value = '';
+      return;
     }
+    input.value = '';
+    const ext = await lookupExternalProduct(code);
+    openProductModal({ barcode: code, name: (ext && ext.name) || '', price: (ext && ext.price != null) ? ext.price : '' }, async (barcode, name, price)=>{
+      await saveProduct(barcode, name, price);
+      await addToCart(barcode, name, price, 1);
+    });
   }
 
   /* ---------------- pending scans (phone scanned, awaiting confirmation) ---------------- */
@@ -217,7 +218,7 @@ if(requireRoleOrRedirect('cashier')){
 
   function showReceiptPreview(){
     if(!paySale){
-      payErrEl.textContent = 'กรุณายืนยันการชำระเงินก่อน (ใส่จำนวนเงินแล้วกดยืนยัน)';
+      payErrEl.textContent = 'กรุณายืนยันการชำระเงินก่อน (กด Space เพื่อยืนยัน)';
       payErrEl.style.display = 'block';
       return;
     }
@@ -232,20 +233,36 @@ if(requireRoleOrRedirect('cashier')){
   }
   document.getElementById('payDownloadBtn').addEventListener('click', downloadReceipt);
 
-  /* F1 = preview receipt, then download on 2nd press | F2 = focus amount | F3 = exit */
+  /* ---------------- keyboard shortcuts ----------------
+     F1  = open the payment screen (from the POS tab)
+     F2  = focus "amount received" + show the change due
+     F3  = 1st press: preview the slip · 2nd press: download it
+     F12 = exit the payment screen
+     Space = confirm the payment
+  --------------------------------------------------- */
   document.addEventListener('keydown', (e)=>{
-    if(paymentModal.style.display !== 'flex') return;
-    if(e.key === 'F1'){
-      e.preventDefault();
-      if(!payReceiptShown) showReceiptPreview();
-      else downloadReceipt();
-    } else if(e.key === 'F2'){
+    const isSpace = e.code === 'Space' || e.key === ' ' || e.key === 'Spacebar';
+
+    if(paymentModal.style.display !== 'flex'){
+      if(e.key === 'F1'){ e.preventDefault(); openPaymentScreen(); }
+      return;
+    }
+
+    if(e.key === 'F2'){
       e.preventDefault();
       payReceivedEl.focus();
       payReceivedEl.select();
+      updateChangeDisplay();
     } else if(e.key === 'F3'){
       e.preventDefault();
+      if(!payReceiptShown) showReceiptPreview();
+      else downloadReceipt();
+    } else if(e.key === 'F12'){
+      e.preventDefault();
       closePaymentScreen();
+    } else if(isSpace){
+      e.preventDefault();
+      confirmPayment();
     }
   });
 

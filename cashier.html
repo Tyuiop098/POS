@@ -57,7 +57,8 @@
           <div class="summary-line"><span>จำนวนรายการ</span><b id="sumCount">0</b></div>
           <div class="summary-line"><span>จำนวนชิ้นรวม</span><b id="sumQty">0</b></div>
 
-          <button class="btn-primary" id="checkoutBtn" style="margin-bottom:10px;">💵 ชำระเงิน</button>
+          <button class="btn-primary" id="checkoutBtn" style="margin-bottom:6px;">💵 ชำระเงิน</button>
+          <div style="text-align:center; font-size:12px; color:var(--ink-soft); margin-bottom:10px;">หรือกด <b class="num">F1</b> เพื่อเปิดหน้าชำระเงิน</div>
           <button class="btn-secondary" id="clearCartBtn" style="width:100%;">ล้างตะกร้า</button>
         </div>
       </div>
@@ -106,7 +107,7 @@
   <div class="payment-sheet">
     <div class="payment-head">
       <h3>💳 หน้าชำระเงิน</h3>
-      <button class="btn-secondary" id="payCloseBtn">ปิด (F3)</button>
+      <button class="btn-secondary" id="payCloseBtn">ปิด (F12)</button>
     </div>
 
     <div class="payment-body">
@@ -119,26 +120,27 @@
         </div>
 
         <div class="field">
-          <label for="payReceived">รับเงินมา (บาท) — กด F2 เพื่อเริ่มพิมพ์</label>
+          <label for="payReceived">รับเงินมา (บาท) — กด F2 เพื่อเริ่มพิมพ์ แล้วดูเงินทอนด้านล่าง</label>
           <input id="payReceived" type="number" step="0.01" min="0" placeholder="0.00">
         </div>
 
         <div class="summary-line"><span>เงินทอน</span><b id="payChange">฿0.00</b></div>
         <div id="payErr" class="error-msg" style="display:none;"></div>
 
-        <button class="btn-primary" id="payConfirmBtn" style="margin-top:10px;">✅ ยืนยันการชำระเงิน</button>
+        <button class="btn-primary" id="payConfirmBtn" style="margin-top:10px;">✅ ยืนยันการชำระเงิน (Space)</button>
 
         <div id="payReceiptWrap" style="display:none; margin-top:16px;">
           <div class="receipt-preview" id="payReceiptBody"></div>
-          <button class="btn-secondary" id="payDownloadBtn" style="width:100%;margin-top:10px;">⬇️ ดาวน์โหลดใบเสร็จ (กด F1 อีกครั้ง)</button>
+          <button class="btn-secondary" id="payDownloadBtn" style="width:100%;margin-top:10px;">⬇️ ดาวน์โหลดใบเสร็จ (กด F3 อีกครั้ง)</button>
         </div>
       </div>
     </div>
 
     <div class="key-hints">
-      <span><b>F2</b> ใส่จำนวนเงินที่ลูกค้าให้มา</span>
-      <span><b>F1</b> ดูตัวอย่างใบเสร็จ — กดอีกครั้งเพื่อดาวน์โหลด</span>
-      <span><b>F3</b> ออกจากหน้าชำระเงิน</span>
+      <span><b>F2</b> ใส่จำนวนเงินที่ลูกค้าให้มา / แสดงเงินทอน</span>
+      <span><b>F3</b> ดูสลิป — กดอีกครั้งเพื่อดาวน์โหลด</span>
+      <span><b>F12</b> ออกจากหน้าชำระเงิน</span>
+      <span><b>Space</b> ยืนยันการชำระเงิน</span>
     </div>
   </div>
 </div>

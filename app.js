@@ -104,6 +104,40 @@ async function lookupOpenFoodFacts(barcode){
   }
 }
 
+/** UPCitemdb's free trial lookup — unlike Open Food Facts it sometimes
+ *  also returns a recorded/suggested price, not just the product name. */
+async function lookupUpcItemDb(barcode){
+  try{
+    const res = await fetch(`https://api.upcitemdb.com/prod/trial/lookup?upc=${encodeURIComponent(barcode)}`);
+    if(!res.ok) return null;
+    const data = await res.json();
+    if(data && data.code === 'OK' && Array.isArray(data.items) && data.items.length){
+      const it = data.items[0];
+      const name = it.title || null;
+      let price = null;
+      if(it.lowest_recorded_price) price = Number(it.lowest_recorded_price);
+      else if(it.highest_recorded_price) price = Number(it.highest_recorded_price);
+      else if(Array.isArray(it.offers) && it.offers.length && it.offers[0].price) price = Number(it.offers[0].price);
+      return { name, price: (price != null && !isNaN(price)) ? price : null, source: 'upcitemdb' };
+    }
+    return null;
+  }catch(e){
+    return null;
+  }
+}
+
+/** Search BOTH public databases at once for a barcode we don't know yet:
+ *  name comes from whichever source has it (Open Food Facts preferred),
+ *  price comes from UPCitemdb when it has a recorded price — it's only
+ *  a suggestion, the cashier/scanner still confirms it before saving. */
+async function lookupExternalProduct(barcode){
+  const [off, upc] = await Promise.all([lookupOpenFoodFacts(barcode), lookupUpcItemDb(barcode)]);
+  const name = (off && off.name) || (upc && upc.name) || null;
+  const price = (upc && upc.price != null) ? upc.price : null;
+  if(!name && price == null) return null;
+  return { name, price };
+}
+
 async function saveProduct(barcode, name, price){
   await storeRef(`products/${barcode}`).set({
     name, price: Number(price), updatedAt: nowStamp()
