@@ -194,6 +194,11 @@ if(requireRoleOrRedirect('cashier')){
     await storeRef('sales').push({ items, total, received, change, at });
     await storeRef('cart').remove();
     paySale = { items, total, received, change, at };
+    // แสดงเงินทอนแล้วปิดหน้าต่างอัตโนมัติใน 2 วินาที
+    payErrEl.style.display = 'none';
+    const changeEl = document.getElementById('payChange');
+    if(changeEl) changeEl.textContent = '฿' + change.toFixed(2);
+    setTimeout(()=> closePaymentScreen(), 2000);
   }
 
   document.getElementById('checkoutBtn').addEventListener('click', openPaymentScreen);

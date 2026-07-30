@@ -305,7 +305,18 @@ tr:hover td{ background:#F5F3FF; }
 #reader{
   border-radius:var(--radius); overflow:hidden; box-shadow:var(--shadow-strong);
   border:2px solid var(--purple);
+  width:100% !important;
+  min-height:320px;
 }
+/* Force the inner video/canvas to fill full width */
+#reader video,
+#reader canvas {
+  width:100% !important;
+  max-width:100% !important;
+  border-radius:var(--radius);
+}
+/* Enlarge the QR scan region */
+#reader > div { width:100% !important; }
 
 /* Scanner viewfinder overlay */
 .scanner-viewfinder{

@@ -168,7 +168,7 @@ if(requireRoleOrRedirect('scanner')){
       html5QrCode = new Html5Qrcode('reader');
       await html5QrCode.start(
         { facingMode: 'environment' },
-        { fps: 12, qrbox: { width: 260, height: 160 } },
+        { fps: 12, qrbox: { width: 300, height: 200 } },
         (decodedText)=> handleDecodedCode(decodedText.trim()),
         ()=>{ /* ignore per-frame decode errors */ }
       );
