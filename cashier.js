@@ -1,8 +1,10 @@
 /* =========================================================
-   scanner.js - logic for scanner.html (phone screen)
+   cashier.js - logic for cashier.html (computer screen)
    ========================================================= */
-if(requireRoleOrRedirect('scanner')){
+if(requireRoleOrRedirect('cashier')){
   document.getElementById('storeCodeLabel').textContent = 'ร้าน: ' + getStoreCode();
+  document.getElementById('codeBig').textContent = getStoreCode();
+
   document.getElementById('resetBtn').addEventListener('click', ()=>{
     if(confirm('ล้างการตั้งค่าของเครื่องนี้และเริ่มใหม่?')){
       localStorage.clear();
@@ -10,148 +12,230 @@ if(requireRoleOrRedirect('scanner')){
     }
   });
 
-  let recent = []; // {name, qty/price, at}
-  let lastCode = null;
-  let lastCodeAt = 0;
-  const RESCAN_COOLDOWN_MS = 2500; // avoid double-adding same barcode while it's still in view
+  /* ---------------- tabs ---------------- */
+  document.querySelectorAll('.tab-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      document.querySelectorAll('.tab-panel').forEach(p=>p.style.display='none');
+      document.getElementById('tab-' + btn.dataset.tab).style.display='block';
+      if(btn.dataset.tab === 'sales') loadSales();
+    });
+  });
 
-  function showToast(msg, type){
-    const t = document.getElementById('toast');
-    t.textContent = msg;
-    t.className = 'scan-toast show ' + (type || '');
-    clearTimeout(t._hideTimer);
-    t._hideTimer = setTimeout(()=> t.classList.remove('show'), 2600);
+  /* ---------------- cart (realtime) ---------------- */
+  let cartData = {};
+
+  storeRef('cart').on('value', (snap)=>{
+    cartData = snap.val() || {};
+    renderCart();
+  });
+
+  function renderCart(){
+    const body = document.getElementById('cartBody');
+    const items = Object.values(cartData);
+    if(items.length === 0){
+      body.innerHTML = `<div class="empty-cart"><div class="big">🛒</div>ยังไม่มีสินค้าในตะกร้า<br><span style="font-size:12px;">สแกนจากมือถือ หรือพิมพ์บาร์โค้ดด้านขวา</span></div>`;
+    } else {
+      body.innerHTML = items.map(it => `
+        <div class="cart-row">
+          <div>
+            <div class="name">${escapeHtml(it.name)}</div>
+            <div class="barcode">${escapeHtml(it.barcode)}</div>
+          </div>
+          <div class="num">฿${fmtMoney(it.price)}</div>
+          <div class="qty-ctrl">
+            <button data-act="dec" data-code="${it.barcode}">–</button>
+            <span>${it.qty}</span>
+            <button data-act="inc" data-code="${it.barcode}">+</button>
+          </div>
+          <div class="row-total">฿${fmtMoney(it.price * it.qty)}</div>
+          <div><button class="del-btn" data-act="del" data-code="${it.barcode}">✕</button></div>
+        </div>
+      `).join('');
+    }
+
+    const count = items.length;
+    const qty = items.reduce((s,i)=>s+i.qty,0);
+    const total = items.reduce((s,i)=>s+i.price*i.qty,0);
+    document.getElementById('sumCount').textContent = count;
+    document.getElementById('sumQty').textContent = qty;
+    document.getElementById('ledTotal').textContent = fmtMoney(total);
   }
 
-  function pushRecent(name, price, qtyText){
-    recent.unshift({ name, price, qtyText, at: Date.now() });
-    recent = recent.slice(0, 15);
-    renderRecent();
+  document.getElementById('cartBody').addEventListener('click', async (e)=>{
+    const btn = e.target.closest('button[data-act]');
+    if(!btn) return;
+    const code = btn.dataset.code;
+    const act = btn.dataset.act;
+    const ref = storeRef(`cart/${code}`);
+    const cur = cartData[code];
+    if(!cur) return;
+    if(act === 'inc'){ await ref.update({ qty: cur.qty + 1 }); }
+    else if(act === 'dec'){
+      if(cur.qty <= 1){ await ref.remove(); } else { await ref.update({ qty: cur.qty - 1 }); }
+    } else if(act === 'del'){ await ref.remove(); }
+  });
+
+  document.getElementById('clearCartBtn').addEventListener('click', async ()=>{
+    if(Object.keys(cartData).length === 0) return;
+    if(confirm('ล้างตะกร้าทั้งหมด?')) await storeRef('cart').remove();
+  });
+
+  /* ---------------- manual add by typing barcode ---------------- */
+  document.getElementById('manualAddBtn').addEventListener('click', handleManualAdd);
+  document.getElementById('manualBarcode').addEventListener('keydown', (e)=>{
+    if(e.key === 'Enter') handleManualAdd();
+  });
+
+  async function handleManualAdd(){
+    const input = document.getElementById('manualBarcode');
+    const code = input.value.trim();
+    if(!code) return;
+    const product = await lookupLocalProduct(code);
+    if(product){
+      await addToCart(code, product.name, product.price, 1);
+      input.value = '';
+    } else {
+      openProductModal({ barcode: code, name:'', price:'' }, async (barcode, name, price)=>{
+        await saveProduct(barcode, name, price);
+        await addToCart(barcode, name, price, 1);
+      });
+      input.value = '';
+    }
   }
 
-  function renderRecent(){
-    const el = document.getElementById('recentLog');
-    if(recent.length === 0){ el.innerHTML = ''; return; }
-    el.innerHTML = '<h2 style="font-size:14px;margin:10px 4px;">รายการล่าสุด</h2>' + recent.map(r=>`
-      <div class="item">
-        <span>${escapeHtml(r.name)}</span>
-        <span class="num">฿${fmtMoney(r.price)} ${r.qtyText || ''}</span>
-      </div>
+  /* ---------------- checkout ---------------- */
+  document.getElementById('checkoutBtn').addEventListener('click', async ()=>{
+    const items = Object.values(cartData);
+    if(items.length === 0){ alert('ยังไม่มีสินค้าในตะกร้า'); return; }
+    const total = items.reduce((s,i)=>s+i.price*i.qty,0);
+    const sale = { items, total, at: nowStamp() };
+    await storeRef('sales').push(sale);
+    await storeRef('cart').remove();
+
+    const receiptBody = document.getElementById('receiptBody');
+    receiptBody.innerHTML = items.map(i=>
+      `<div style="display:flex;justify-content:space-between;">
+        <span>${escapeHtml(i.name)} x${i.qty}</span><span>฿${fmtMoney(i.price*i.qty)}</span>
+      </div>`
+    ).join('') + `<hr style="border:none;border-top:1px dashed #ccc;margin:8px 0;">
+      <div style="display:flex;justify-content:space-between;font-weight:700;">
+        <span>รวมทั้งหมด</span><span>฿${fmtMoney(total)}</span>
+      </div>`;
+    document.getElementById('receiptModal').style.display = 'flex';
+  });
+  document.getElementById('receiptClose').addEventListener('click', ()=>{
+    document.getElementById('receiptModal').style.display = 'none';
+  });
+
+  /* ---------------- products tab ---------------- */
+  let productsData = {};
+  storeRef('products').on('value', (snap)=>{
+    productsData = snap.val() || {};
+    renderProducts();
+  });
+
+  document.getElementById('productSearch').addEventListener('input', renderProducts);
+
+  function renderProducts(){
+    const q = document.getElementById('productSearch').value.trim().toLowerCase();
+    const body = document.getElementById('productsBody');
+    const entries = Object.entries(productsData).filter(([code,p])=>
+      !q || code.toLowerCase().includes(q) || (p.name||'').toLowerCase().includes(q)
+    );
+    if(entries.length === 0){
+      body.innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--ink-soft);padding:30px;">ยังไม่มีสินค้าที่บันทึกไว้</td></tr>`;
+      return;
+    }
+    body.innerHTML = entries.map(([code,p])=>`
+      <tr>
+        <td class="num">${escapeHtml(code)}</td>
+        <td>${escapeHtml(p.name)}</td>
+        <td class="price-tag">฿${fmtMoney(p.price)}</td>
+        <td style="font-size:12px;color:var(--ink-soft);">${p.updatedAt ? new Date(p.updatedAt).toLocaleString('th-TH') : '-'}</td>
+        <td>
+          <button class="icon-btn edit" data-code="${code}" data-act="edit">✎</button>
+          <button class="icon-btn del" data-code="${code}" data-act="del">🗑</button>
+        </td>
+      </tr>
     `).join('');
   }
 
-  async function handleDecodedCode(code){
-    const now = Date.now();
-    if(code === lastCode && (now - lastCodeAt) < RESCAN_COOLDOWN_MS) return;
-    lastCode = code; lastCodeAt = now;
-
-    // vibrate for tactile feedback if supported
-    if(navigator.vibrate) navigator.vibrate(80);
-
-    try{
-      const local = await lookupLocalProduct(code);
-      if(local && local.price != null){
-        await addToCart(code, local.name, local.price, 1);
-        pushRecent(local.name, local.price, 'x1');
-        showToast(`✓ เพิ่มแล้ว: ${local.name} — ฿${fmtMoney(local.price)}`, 'ok');
-        return;
-      }
-
-      // not found locally -> try public barcode database for the NAME
-      showToast('กำลังค้นหาชื่อสินค้า...', '');
-      const off = await lookupOpenFoodFacts(code);
-      openUnknownModal(code, off ? off.name : '', !!off);
-
-    }catch(e){
-      showToast('เกิดข้อผิดพลาด ลองใหม่อีกครั้ง', 'err');
+  document.getElementById('productsBody').addEventListener('click', async (e)=>{
+    const btn = e.target.closest('button[data-act]');
+    if(!btn) return;
+    const code = btn.dataset.code;
+    if(btn.dataset.act === 'del'){
+      if(confirm(`ลบสินค้าบาร์โค้ด ${code}?`)) await storeRef(`products/${code}`).remove();
+    } else if(btn.dataset.act === 'edit'){
+      const p = productsData[code];
+      openProductModal({ barcode: code, name: p.name, price: p.price }, async (barcode, name, price)=>{
+        await saveProduct(barcode, name, price);
+      }, true);
     }
-  }
+  });
 
-  function openUnknownModal(barcode, prefilledName, foundName){
-    const modal = document.getElementById('unknownModal');
-    document.getElementById('umTitle').textContent = foundName ? 'พบชื่อสินค้า — กรอกราคา' : 'ไม่พบสินค้านี้ในระบบ';
-    document.getElementById('umHint').textContent = foundName
-      ? 'ดึงชื่อสินค้าจากฐานข้อมูลสาธารณะแล้ว กรุณาใส่ราคาเพื่อบันทึก'
-      : 'กรอกชื่อสินค้าและราคาเพื่อบันทึกไว้ใช้ครั้งต่อไป';
-    document.getElementById('umBarcode').value = barcode;
-    document.getElementById('umName').value = prefilledName || '';
-    document.getElementById('umPrice').value = '';
-    document.getElementById('umErr').style.display = 'none';
+  document.getElementById('addProductBtn').addEventListener('click', ()=>{
+    openProductModal({ barcode:'', name:'', price:'' }, async (barcode, name, price)=>{
+      await saveProduct(barcode, name, price);
+    });
+  });
+
+  function openProductModal(initial, onSave, lockBarcode){
+    const modal = document.getElementById('productModal');
+    document.getElementById('pmTitle').textContent = lockBarcode ? 'แก้ไขสินค้า' : 'เพิ่ม / บันทึกสินค้า';
+    const barcodeEl = document.getElementById('pmBarcode');
+    const nameEl = document.getElementById('pmName');
+    const priceEl = document.getElementById('pmPrice');
+    const errEl = document.getElementById('pmErr');
+    barcodeEl.value = initial.barcode || '';
+    nameEl.value = initial.name || '';
+    priceEl.value = initial.price || '';
+    barcodeEl.disabled = !!lockBarcode;
+    errEl.style.display = 'none';
     modal.style.display = 'flex';
-    document.getElementById('umPrice').focus();
 
     const saveHandler = async ()=>{
-      const name = document.getElementById('umName').value.trim();
-      const price = parseFloat(document.getElementById('umPrice').value);
-      if(!name || isNaN(price) || price < 0){
-        const err = document.getElementById('umErr');
-        err.textContent = 'กรอกชื่อสินค้าและราคาให้ถูกต้อง';
-        err.style.display = 'block';
+      const barcode = barcodeEl.value.trim();
+      const name = nameEl.value.trim();
+      const price = parseFloat(priceEl.value);
+      if(!barcode || !name || isNaN(price) || price < 0){
+        errEl.textContent = 'กรุณากรอกบาร์โค้ด ชื่อสินค้า และราคาให้ถูกต้อง';
+        errEl.style.display = 'block';
         return;
       }
-      await saveProduct(barcode, name, price);
-      await addToCart(barcode, name, price, 1);
-      pushRecent(name, price, 'x1 (ใหม่)');
-      showToast(`✓ บันทึกและเพิ่มแล้ว: ${name}`, 'ok');
+      await onSave(barcode, name, price);
       cleanup();
     };
-    const cancelHandler = ()=>{
-      lastCode = null; // allow immediate rescan if they cancel
-      cleanup();
-    };
+    const cancelHandler = ()=> cleanup();
     function cleanup(){
       modal.style.display = 'none';
-      document.getElementById('umSave').removeEventListener('click', saveHandler);
-      document.getElementById('umCancel').removeEventListener('click', cancelHandler);
+      document.getElementById('pmSave').removeEventListener('click', saveHandler);
+      document.getElementById('pmCancel').removeEventListener('click', cancelHandler);
     }
-    document.getElementById('umSave').addEventListener('click', saveHandler);
-    document.getElementById('umCancel').addEventListener('click', cancelHandler);
+    document.getElementById('pmSave').addEventListener('click', saveHandler);
+    document.getElementById('pmCancel').addEventListener('click', cancelHandler);
   }
 
-  /* ---------------- manual entry ---------------- */
-  document.getElementById('manualBtn').addEventListener('click', ()=>{
-    const el = document.getElementById('manualInput');
-    const code = el.value.trim();
-    if(!code) return;
-    el.value = '';
-    lastCode = null; // manual entries shouldn't be blocked by cooldown
-    handleDecodedCode(code);
-  });
-  document.getElementById('manualInput').addEventListener('keydown', (e)=>{
-    if(e.key === 'Enter') document.getElementById('manualBtn').click();
-  });
-
-  /* ---------------- camera (html5-qrcode) ---------------- */
-  let html5QrCode = null;
-  let camRunning = false;
-
-  async function startCamera(){
-    try{
-      html5QrCode = new Html5Qrcode('reader');
-      await html5QrCode.start(
-        { facingMode: 'environment' },
-        { fps: 12, qrbox: { width: 260, height: 160 } },
-        (decodedText)=> handleDecodedCode(decodedText.trim()),
-        ()=>{ /* ignore per-frame decode errors */ }
-      );
-      camRunning = true;
-      document.getElementById('toggleCamBtn').textContent = '⏸ หยุดกล้องชั่วคราว';
-    }catch(e){
-      showToast('เปิดกล้องไม่สำเร็จ — ตรวจสอบสิทธิ์การเข้าถึงกล้อง', 'err');
+  /* ---------------- sales tab ---------------- */
+  async function loadSales(){
+    const snap = await storeRef('sales').limitToLast(50).once('value');
+    const val = snap.val() || {};
+    const list = Object.values(val).sort((a,b)=>b.at-a.at);
+    const el = document.getElementById('salesList');
+    if(list.length === 0){
+      el.innerHTML = `<div style="padding:40px;text-align:center;color:var(--ink-soft);">ยังไม่มีประวัติการขาย</div>`;
+      return;
     }
+    el.innerHTML = list.map(s=>`
+      <div class="sale-item">
+        <div>
+          <div>${s.items.length} รายการ (${s.items.reduce((a,i)=>a+i.qty,0)} ชิ้น)</div>
+          <div class="meta">${new Date(s.at).toLocaleString('th-TH')}</div>
+        </div>
+        <div class="amt">฿${fmtMoney(s.total)}</div>
+      </div>
+    `).join('');
   }
-
-  async function stopCamera(){
-    if(html5QrCode && camRunning){
-      await html5QrCode.stop();
-      camRunning = false;
-      document.getElementById('toggleCamBtn').textContent = '▶ เปิดกล้องอีกครั้ง';
-    }
-  }
-
-  document.getElementById('toggleCamBtn').addEventListener('click', ()=>{
-    if(camRunning) stopCamera(); else startCamera();
-  });
-
-  startCamera();
 }
