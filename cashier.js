@@ -125,7 +125,8 @@ if(requireRoleOrRedirect('cashier')){
 
   let paySale = null;      // filled once payment is confirmed (items/total snapshot)
   let payReceiptShown = false; // F3 press #1 (preview) vs press #2 (download)
-  let paySpaceArmed = false;   // Space press #1 (show change) vs press #2 (confirm payment)
+  let paySpaceArmed = false;   // Space press #1 (show change)
+  let spaceStep = 0;           // 0=init 1=เห็นเงินทอน 2=เห็นสลิป 3=บันทึก+ปิด
 
   function openPaymentScreen(){
     const items = Object.values(cartData);
@@ -135,6 +136,7 @@ if(requireRoleOrRedirect('cashier')){
     paySale = null;
     payReceiptShown = false;
     paySpaceArmed = false;
+    spaceStep = 0;
     payReceiptWrap.style.display = 'none';
     payErrEl.style.display = 'none';
     payReceivedEl.value = '';
@@ -194,11 +196,7 @@ if(requireRoleOrRedirect('cashier')){
     await storeRef('sales').push({ items, total, received, change, at });
     await storeRef('cart').remove();
     paySale = { items, total, received, change, at };
-    // แสดงเงินทอนแล้วปิดหน้าต่างอัตโนมัติใน 2 วินาที
-    payErrEl.style.display = 'none';
-    const changeEl = document.getElementById('payChange');
-    if(changeEl) changeEl.textContent = '฿' + change.toFixed(2);
-    setTimeout(()=> closePaymentScreen(), 2000);
+    closePaymentScreen();
   }
 
   document.getElementById('checkoutBtn').addEventListener('click', openPaymentScreen);
@@ -244,16 +242,17 @@ if(requireRoleOrRedirect('cashier')){
       payReceivedEl.select();
     } else if(e.key === 'F3'){
       e.preventDefault();
-      if(!payReceiptShown) showReceiptPreview();
-      else downloadReceipt();
+      closePaymentScreen();
     } else if(e.key === 'F12'){
       e.preventDefault();
       closePaymentScreen();
     } else if(isSpace){
       e.preventDefault();
-      if(paySale) return; // already confirmed, nothing more Space needs to do
-      if(!paySpaceArmed){
-        // 1st press: validate the amount and show the change due
+      // Space 3 ขั้น:
+      // ขั้น 1 → แสดงเงินทอน
+      // ขั้น 2 → แสดงสลิป
+      // ขั้น 3 → บันทึก + ปิดหน้าต่าง
+      if(spaceStep === 0){
         const received = parseFloat(payReceivedEl.value);
         if(isNaN(received)){
           payErrEl.textContent = 'กรุณาใส่จำนวนเงินที่ลูกค้าให้มาก่อน (กด F2)';
@@ -263,8 +262,21 @@ if(requireRoleOrRedirect('cashier')){
         payErrEl.style.display = 'none';
         updateChangeDisplay();
         paySpaceArmed = true;
-      } else {
-        // 2nd press: actually confirm & finalize the payment
+        spaceStep = 1;
+      } else if(spaceStep === 1){
+        // ขั้น 2: แสดงสลิป (ยังไม่บันทึก)
+        const received = parseFloat(payReceivedEl.value);
+        const items = Object.values(cartData);
+        const total = items.reduce((s,i)=>s+i.price*i.qty,0);
+        const change = received - total;
+        const at = nowStamp();
+        paySale = { items, total, received, change, at };
+        payReceiptBody.textContent = buildReceiptText(paySale);
+        payReceiptWrap.style.display = 'block';
+        payReceiptShown = true;
+        spaceStep = 2;
+      } else if(spaceStep === 2){
+        // ขั้น 3: บันทึก + ปิด
         confirmPayment();
       }
     }
