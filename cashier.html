@@ -57,6 +57,9 @@
 
           <button class="btn-primary" id="checkoutBtn" style="margin-bottom:10px;">💵 ชำระเงิน</button>
           <button class="btn-secondary" id="clearCartBtn" style="width:100%;">ล้างตะกร้า</button>
+          <div style="text-align:center;font-size:11px;color:var(--ink-soft);margin-top:10px;">
+            <b>F9</b> หน้ารายการชำระเงิน · <b>Space</b> ยืนยันจ่าย · <b>F1</b> โหลดใบเสร็จ
+          </div>
         </div>
       </div>
     </div>
@@ -103,10 +106,28 @@
 <div id="receiptModal" class="modal-overlay" style="display:none;">
   <div class="modal-sheet">
     <h3>✅ ชำระเงินสำเร็จ</h3>
-    <p class="hint">บันทึกยอดขายเรียบร้อยแล้ว</p>
+    <p class="hint">บันทึกยอดขายเรียบร้อยแล้ว — กด <b>F1</b> เพื่อโหลดใบเสร็จ</p>
     <div id="receiptBody" style="font-family:'Space Mono',monospace; font-size:13px; line-height:1.7;"></div>
     <div class="modal-actions">
-      <button class="btn-primary" id="receiptClose" style="width:100%;">เสร็จสิ้น</button>
+      <button class="btn-secondary" id="receiptDownloadBtn">📄 โหลดใบเสร็จ (F1)</button>
+      <button class="btn-primary" id="receiptClose">เสร็จสิ้น</button>
+    </div>
+  </div>
+</div>
+
+<!-- ---- Full screen: payment view (F9) ---- -->
+<div id="paymentView" class="modal-overlay" style="display:none; align-items:center;">
+  <div class="modal-sheet" style="max-width:560px;">
+    <h3>🧾 หน้ารายการชำระเงิน</h3>
+    <p class="hint">ตรวจสอบรายการก่อนรับเงิน — กด <b>Space</b> เพื่อยืนยันชำระเงิน หรือ <b>Esc</b> เพื่อย้อนกลับ</p>
+    <div id="paymentItems" style="max-height:40vh; overflow:auto; border-top:1px solid var(--line); border-bottom:1px solid var(--line); margin:10px 0;"></div>
+    <div class="led-display" style="margin-top:12px;">
+      <div class="label">ยอดที่ต้องชำระ</div>
+      <div class="amount"><small>฿</small><span id="paymentLedTotal">0.00</span></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" id="paymentCancelBtn">ย้อนกลับ (Esc)</button>
+      <button class="btn-primary" id="paymentConfirmBtn">✅ ยืนยันชำระเงิน (Space)</button>
     </div>
   </div>
 </div>
