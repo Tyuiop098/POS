@@ -105,123 +105,147 @@ if(requireRoleOrRedirect('cashier')){
     }
   }
 
-  /* ---------------- checkout ---------------- */
-  let lastReceipt = null; // { items, total, at } of most recently completed sale
-
-  async function performCheckout(){
-    const items = Object.values(cartData);
-    if(items.length === 0){ alert('ยังไม่มีสินค้าในตะกร้า'); return; }
-    const total = items.reduce((s,i)=>s+i.price*i.qty,0);
-    const sale = { items, total, at: nowStamp() };
-    await storeRef('sales').push(sale);
-    await storeRef('cart').remove();
-
-    lastReceipt = sale;
-    hidePaymentView();
-    showReceiptModal(sale);
-  }
-
-  function showReceiptModal(sale){
-    const receiptBody = document.getElementById('receiptBody');
-    receiptBody.innerHTML = sale.items.map(i=>
-      `<div style="display:flex;justify-content:space-between;">
-        <span>${escapeHtml(i.name)} x${i.qty}</span><span>฿${fmtMoney(i.price*i.qty)}</span>
-      </div>`
-    ).join('') + `<hr style="border:none;border-top:1px dashed #ccc;margin:8px 0;">
-      <div style="display:flex;justify-content:space-between;font-weight:700;">
-        <span>รวมทั้งหมด</span><span>฿${fmtMoney(sale.total)}</span>
-      </div>`;
-    document.getElementById('receiptModal').style.display = 'flex';
-  }
-
-  document.getElementById('checkoutBtn').addEventListener('click', performCheckout);
-  document.getElementById('receiptClose').addEventListener('click', ()=>{
-    document.getElementById('receiptModal').style.display = 'none';
+  /* ---------------- pending scans (phone scanned, awaiting confirmation) ---------------- */
+  let pendingScansData = {};
+  storeRef('pendingScans').on('value', (snap)=>{
+    pendingScansData = snap.val() || {};
+    renderPendingScans();
   });
 
-  function buildReceiptText(sale){
-    const lines = [];
-    lines.push('POS Mart — ใบเสร็จรับเงิน');
-    lines.push('ร้าน: ' + getStoreCode());
-    lines.push('วันที่: ' + new Date(sale.at).toLocaleString('th-TH'));
-    lines.push('----------------------------------------');
-    sale.items.forEach(i=>{
-      lines.push(`${i.name}`);
-      lines.push(`  ${fmtMoney(i.price)} x ${i.qty} = ฿${fmtMoney(i.price*i.qty)}`);
-    });
-    lines.push('----------------------------------------');
-    lines.push(`รวมทั้งหมด: ฿${fmtMoney(sale.total)}`);
-    lines.push('ขอบคุณที่ใช้บริการ');
-    return lines.join('\n');
+  function renderPendingScans(){
+    const area = document.getElementById('pendingScanArea');
+    const entries = Object.entries(pendingScansData);
+    if(entries.length === 0){ area.innerHTML = ''; return; }
+    area.innerHTML = entries.map(([key, it])=>`
+      <div class="pending-scan" data-key="${key}">
+        <div class="info">📱 สแกนใหม่: <span class="nm">${escapeHtml(it.name)}</span> — <span class="pr">฿${fmtMoney(it.price)}</span></div>
+        <div class="actions">
+          <button class="confirm" data-key="${key}" data-act="confirm">บันทึกรายการ</button>
+          <button class="reject" data-key="${key}" data-act="reject">ยกเลิก</button>
+        </div>
+      </div>
+    `).join('');
   }
 
-  function downloadReceipt(sale){
-    if(!sale){ alert('ยังไม่มีใบเสร็จให้โหลด — ต้องชำระเงินก่อนอย่างน้อย 1 ครั้ง'); return; }
-    const text = buildReceiptText(sale);
-    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `receipt-${sale.at}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }
+  document.getElementById('pendingScanArea').addEventListener('click', async (e)=>{
+    const btn = e.target.closest('button[data-act]');
+    if(!btn) return;
+    const key = btn.dataset.key;
+    const item = pendingScansData[key];
+    if(!item) return;
+    if(btn.dataset.act === 'confirm') await confirmPendingScan(key, item);
+    else await rejectPendingScan(key);
+  });
 
-  document.getElementById('receiptDownloadBtn').addEventListener('click', ()=> downloadReceipt(lastReceipt));
+  /* ---------------- payment screen ---------------- */
+  const paymentModal = document.getElementById('paymentModal');
+  const payItemsEl = document.getElementById('payItems');
+  const payTotalEl = document.getElementById('payTotal');
+  const payReceivedEl = document.getElementById('payReceived');
+  const payChangeEl = document.getElementById('payChange');
+  const payErrEl = document.getElementById('payErr');
+  const payReceiptWrap = document.getElementById('payReceiptWrap');
+  const payReceiptBody = document.getElementById('payReceiptBody');
 
-  /* ---------------- payment view (F9 full screen) ---------------- */
-  function showPaymentView(){
+  let paySale = null;      // filled once payment is confirmed (items/total snapshot)
+  let payReceiptShown = false; // F1 press #1 (preview) vs press #2 (download)
+
+  function openPaymentScreen(){
     const items = Object.values(cartData);
     if(items.length === 0){ alert('ยังไม่มีสินค้าในตะกร้า'); return; }
     const total = items.reduce((s,i)=>s+i.price*i.qty,0);
-    document.getElementById('paymentItems').innerHTML = items.map(i=>`
-      <div style="display:flex;justify-content:space-between;padding:8px 4px;border-bottom:1px solid var(--line);font-size:14px;">
-        <span>${escapeHtml(i.name)} <span style="color:var(--ink-soft);">x${i.qty}</span></span>
-        <span class="num">฿${fmtMoney(i.price*i.qty)}</span>
+
+    paySale = null;
+    payReceiptShown = false;
+    payReceiptWrap.style.display = 'none';
+    payErrEl.style.display = 'none';
+    payReceivedEl.value = '';
+    payChangeEl.textContent = '฿0.00';
+
+    payItemsEl.innerHTML = items.map(i=>`
+      <div class="pay-item-row">
+        <div>
+          <div class="nm">${escapeHtml(i.name)}</div>
+          <div class="meta">฿${fmtMoney(i.price)} x ${i.qty}</div>
+        </div>
+        <div class="amt">฿${fmtMoney(i.price * i.qty)}</div>
       </div>
     `).join('');
-    document.getElementById('paymentLedTotal').textContent = fmtMoney(total);
-    document.getElementById('paymentView').style.display = 'flex';
+    payTotalEl.textContent = fmtMoney(total);
+
+    paymentModal.style.display = 'flex';
+    payReceivedEl.focus();
   }
 
-  function hidePaymentView(){
-    document.getElementById('paymentView').style.display = 'none';
+  function closePaymentScreen(){
+    paymentModal.style.display = 'none';
+    paySale = null;
+    payReceiptShown = false;
   }
 
-  function isPaymentViewOpen(){
-    return document.getElementById('paymentView').style.display === 'flex';
+  function updateChangeDisplay(){
+    if(!paySale) return;
+    const received = parseFloat(payReceivedEl.value);
+    if(isNaN(received)){ payChangeEl.textContent = '฿0.00'; return; }
+    const change = received - paySale.total;
+    payChangeEl.textContent = (change < 0 ? '-' : '') + '฿' + fmtMoney(Math.abs(change));
   }
+  payReceivedEl.addEventListener('input', updateChangeDisplay);
 
-  document.getElementById('paymentCancelBtn').addEventListener('click', hidePaymentView);
-  document.getElementById('paymentConfirmBtn').addEventListener('click', performCheckout);
-
-  /* ---------------- keyboard shortcuts: F9 / Space / F1 / Esc ---------------- */
-  document.addEventListener('keydown', (e)=>{
-    const tag = document.activeElement ? document.activeElement.tagName : '';
-    const isTyping = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
-
-    if(e.key === 'F9'){
-      e.preventDefault();
-      if(!isPaymentViewOpen()) showPaymentView();
+  async function confirmPayment(){
+    const items = Object.values(cartData);
+    if(items.length === 0){ alert('ยังไม่มีสินค้าในตะกร้า'); return; }
+    const total = items.reduce((s,i)=>s+i.price*i.qty,0);
+    const received = parseFloat(payReceivedEl.value);
+    if(isNaN(received) || received < total){
+      payErrEl.textContent = 'กรุณาใส่จำนวนเงินที่ลูกค้าให้มา (ต้องไม่น้อยกว่ายอดรวม) — กด F2';
+      payErrEl.style.display = 'block';
       return;
     }
+    payErrEl.style.display = 'none';
+    const at = nowStamp();
+    const change = received - total;
+    await storeRef('sales').push({ items, total, received, change, at });
+    await storeRef('cart').remove();
+    paySale = { items, total, received, change, at };
+  }
+
+  document.getElementById('checkoutBtn').addEventListener('click', openPaymentScreen);
+  document.getElementById('payCloseBtn').addEventListener('click', closePaymentScreen);
+  document.getElementById('payConfirmBtn').addEventListener('click', confirmPayment);
+  payReceivedEl.addEventListener('keydown', (e)=>{ if(e.key === 'Enter') confirmPayment(); });
+
+  function showReceiptPreview(){
+    if(!paySale){
+      payErrEl.textContent = 'กรุณายืนยันการชำระเงินก่อน (ใส่จำนวนเงินแล้วกดยืนยัน)';
+      payErrEl.style.display = 'block';
+      return;
+    }
+    payReceiptBody.textContent = buildReceiptText(paySale);
+    payReceiptWrap.style.display = 'block';
+    payReceiptShown = true;
+  }
+
+  function downloadReceipt(){
+    if(!paySale) return;
+    downloadTextFile(`receipt-${paySale.at}.txt`, buildReceiptText(paySale));
+  }
+  document.getElementById('payDownloadBtn').addEventListener('click', downloadReceipt);
+
+  /* F1 = preview receipt, then download on 2nd press | F2 = focus amount | F3 = exit */
+  document.addEventListener('keydown', (e)=>{
+    if(paymentModal.style.display !== 'flex') return;
     if(e.key === 'F1'){
       e.preventDefault();
-      downloadReceipt(lastReceipt);
-      return;
-    }
-    if(e.code === 'Space' || e.key === ' '){
-      if(isTyping) return; // let space type normally in text fields
-      if(isPaymentViewOpen()){
-        e.preventDefault();
-        performCheckout();
-      }
-      return;
-    }
-    if(e.key === 'Escape' && isPaymentViewOpen()){
-      hidePaymentView();
+      if(!payReceiptShown) showReceiptPreview();
+      else downloadReceipt();
+    } else if(e.key === 'F2'){
+      e.preventDefault();
+      payReceivedEl.focus();
+      payReceivedEl.select();
+    } else if(e.key === 'F3'){
+      e.preventDefault();
+      closePaymentScreen();
     }
   });
 

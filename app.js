@@ -130,3 +130,51 @@ function escapeHtml(str){
     '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
   }[m]));
 }
+
+/* ---------------------------------------------------------
+   Pending scans: when the PHONE scans an item, it does NOT
+   drop it straight into the cart. It pushes a "pending scan"
+   which the CASHIER computer shows as a confirmation UI —
+   the cashier presses "บันทึกรายการ" to actually add it.
+   --------------------------------------------------------- */
+async function pushPendingScan(barcode, name, price){
+  const ref = storeRef('pendingScans').push();
+  await ref.set({ barcode, name, price: Number(price), qty: 1, at: nowStamp() });
+  return ref.key;
+}
+
+async function confirmPendingScan(key, item){
+  await addToCart(item.barcode, item.name, item.price, item.qty || 1);
+  await storeRef(`pendingScans/${key}`).remove();
+}
+
+async function rejectPendingScan(key){
+  await storeRef(`pendingScans/${key}`).remove();
+}
+
+/* ---------------------------------------------------------
+   Build a plain-text receipt (used for the on-screen preview
+   and for the downloadable .txt file on the payment screen)
+   --------------------------------------------------------- */
+function buildReceiptText({ items, total, received, change, at }){
+  const line = '----------------------------------------';
+  const rows = items.map(i=>{
+    const left = `${i.name} x${i.qty}`;
+    const right = `฿${fmtMoney(i.price * i.qty)}`;
+    return left + ' '.repeat(Math.max(1, 40 - left.length - right.length)) + right;
+  }).join('\n');
+  let out = `POS Mart — ใบเสร็จ\n${new Date(at || Date.now()).toLocaleString('th-TH')}\n${line}\n${rows}\n${line}\nรวมทั้งหมด: ฿${fmtMoney(total)}`;
+  if(received != null){
+    out += `\nรับเงินมา: ฿${fmtMoney(received)}\nเงินทอน: ฿${fmtMoney(change)}`;
+  }
+  return out + `\n${line}\nขอบคุณที่ใช้บริการ`;
+}
+
+function downloadTextFile(filename, text){
+  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
