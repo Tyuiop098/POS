@@ -3,6 +3,40 @@
    ========================================================= */
 if(requireRoleOrRedirect('scanner')){
   document.getElementById('storeCodeLabel').textContent = 'ร้าน: ' + getStoreCode();
+
+  /* ---- Beep sound (Web Audio API) ---- */
+  let _audioCtx = null;
+  function getAudioCtx(){
+    if(!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    return _audioCtx;
+  }
+  function playBeep(freq, dur, vol){
+    try{
+      const ctx = getAudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(freq || 1050, ctx.currentTime);
+      gain.gain.setValueAtTime(vol || 0.18, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + (dur || 0.09));
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + (dur || 0.09));
+    }catch(e){}
+  }
+  function scanBeep(){ playBeep(1050, 0.09, 0.18); }
+  function errorBeep(){ playBeep(300, 0.15, 0.12); }
+
+  /* ---- Flash animation on reader ---- */
+  function flashReader(){
+    const el = document.getElementById('reader');
+    if(!el) return;
+    el.classList.remove('scan-flash');
+    void el.offsetWidth; // reflow
+    el.classList.add('scan-flash');
+    setTimeout(()=> el.classList.remove('scan-flash'), 600);
+  }
   document.getElementById('resetBtn').addEventListener('click', ()=>{
     if(confirm('ล้างการตั้งค่าของเครื่องนี้และเริ่มใหม่?')){
       localStorage.clear();
@@ -47,6 +81,8 @@ if(requireRoleOrRedirect('scanner')){
 
     // vibrate for tactile feedback if supported
     if(navigator.vibrate) navigator.vibrate(80);
+    scanBeep();
+    flashReader();
 
     try{
       const local = await lookupLocalProduct(code);
