@@ -20,8 +20,14 @@ if(requireRoleOrRedirect('cashier')){
       document.querySelectorAll('.tab-panel').forEach(p=>p.style.display='none');
       document.getElementById('tab-' + btn.dataset.tab).style.display='block';
       if(btn.dataset.tab === 'sales') loadSales();
+      if(btn.dataset.tab === 'pos') document.getElementById('manualBarcode').focus();
     });
   });
+
+  // keep the barcode field focused & ready so a scanner plugged into
+  // this computer (keyboard-wedge) can just scan — types the code + Enter,
+  // and the item is added straight away, no confirm click needed.
+  document.getElementById('manualBarcode').focus();
 
   /* ---------------- cart (realtime) ---------------- */
   let cartData = {};
@@ -96,6 +102,7 @@ if(requireRoleOrRedirect('cashier')){
     if(product){
       await addToCart(code, product.name, product.price, 1);
       input.value = '';
+      input.focus();
       return;
     }
     input.value = '';
@@ -149,7 +156,8 @@ if(requireRoleOrRedirect('cashier')){
   const payReceiptBody = document.getElementById('payReceiptBody');
 
   let paySale = null;      // filled once payment is confirmed (items/total snapshot)
-  let payReceiptShown = false; // F1 press #1 (preview) vs press #2 (download)
+  let payReceiptShown = false; // F3 press #1 (preview) vs press #2 (download)
+  let paySpaceArmed = false;   // Space press #1 (show change) vs press #2 (confirm payment)
 
   function openPaymentScreen(){
     const items = Object.values(cartData);
@@ -158,6 +166,7 @@ if(requireRoleOrRedirect('cashier')){
 
     paySale = null;
     payReceiptShown = false;
+    paySpaceArmed = false;
     payReceiptWrap.style.display = 'none';
     payErrEl.style.display = 'none';
     payReceivedEl.value = '';
@@ -182,16 +191,24 @@ if(requireRoleOrRedirect('cashier')){
     paymentModal.style.display = 'none';
     paySale = null;
     payReceiptShown = false;
+    paySpaceArmed = false;
+  }
+
+  function currentCartTotal(){
+    return Object.values(cartData).reduce((s,i)=>s+i.price*i.qty,0);
   }
 
   function updateChangeDisplay(){
-    if(!paySale) return;
+    const total = paySale ? paySale.total : currentCartTotal();
     const received = parseFloat(payReceivedEl.value);
     if(isNaN(received)){ payChangeEl.textContent = '฿0.00'; return; }
-    const change = received - paySale.total;
+    const change = received - total;
     payChangeEl.textContent = (change < 0 ? '-' : '') + '฿' + fmtMoney(Math.abs(change));
   }
-  payReceivedEl.addEventListener('input', updateChangeDisplay);
+  payReceivedEl.addEventListener('input', ()=>{
+    paySpaceArmed = false; // amount changed — need to re-check the change before it can be confirmed again
+    updateChangeDisplay();
+  });
 
   async function confirmPayment(){
     const items = Object.values(cartData);
@@ -235,10 +252,10 @@ if(requireRoleOrRedirect('cashier')){
 
   /* ---------------- keyboard shortcuts ----------------
      F1  = open the payment screen (from the POS tab)
-     F2  = focus "amount received" + show the change due
+     F2  = focus "amount received"
      F3  = 1st press: preview the slip · 2nd press: download it
      F12 = exit the payment screen
-     Space = confirm the payment
+     Space = 1st press: show the change due · 2nd press: confirm payment
   --------------------------------------------------- */
   document.addEventListener('keydown', (e)=>{
     const isSpace = e.code === 'Space' || e.key === ' ' || e.key === 'Spacebar';
@@ -252,7 +269,6 @@ if(requireRoleOrRedirect('cashier')){
       e.preventDefault();
       payReceivedEl.focus();
       payReceivedEl.select();
-      updateChangeDisplay();
     } else if(e.key === 'F3'){
       e.preventDefault();
       if(!payReceiptShown) showReceiptPreview();
@@ -262,7 +278,22 @@ if(requireRoleOrRedirect('cashier')){
       closePaymentScreen();
     } else if(isSpace){
       e.preventDefault();
-      confirmPayment();
+      if(paySale) return; // already confirmed, nothing more Space needs to do
+      if(!paySpaceArmed){
+        // 1st press: validate the amount and show the change due
+        const received = parseFloat(payReceivedEl.value);
+        if(isNaN(received)){
+          payErrEl.textContent = 'กรุณาใส่จำนวนเงินที่ลูกค้าให้มาก่อน (กด F2)';
+          payErrEl.style.display = 'block';
+          return;
+        }
+        payErrEl.style.display = 'none';
+        updateChangeDisplay();
+        paySpaceArmed = true;
+      } else {
+        // 2nd press: actually confirm & finalize the payment
+        confirmPayment();
+      }
     }
   });
 
@@ -350,6 +381,7 @@ if(requireRoleOrRedirect('cashier')){
       modal.style.display = 'none';
       document.getElementById('pmSave').removeEventListener('click', saveHandler);
       document.getElementById('pmCancel').removeEventListener('click', cancelHandler);
+      document.getElementById('manualBarcode').focus();
     }
     document.getElementById('pmSave').addEventListener('click', saveHandler);
     document.getElementById('pmCancel').addEventListener('click', cancelHandler);

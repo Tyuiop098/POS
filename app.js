@@ -166,10 +166,11 @@ function escapeHtml(str){
 }
 
 /* ---------------------------------------------------------
-   Pending scans: when the PHONE scans an item, it does NOT
-   drop it straight into the cart. It pushes a "pending scan"
-   which the CASHIER computer shows as a confirmation UI —
-   the cashier presses "บันทึกรายการ" to actually add it.
+   Pending scans: a scan coming from the PHONE does NOT drop
+   straight into the cart — it's queued here and the CASHIER
+   computer shows a confirm/reject UI for it. Barcodes typed
+   or scanned directly ON the computer skip this and go
+   straight into the cart (see addToCart calls in cashier.js).
    --------------------------------------------------------- */
 async function pushPendingScan(barcode, name, price){
   const ref = storeRef('pendingScans').push();
