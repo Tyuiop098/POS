@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>แคชเชียร์ — POS Mart</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="screen">
+  <div class="topbar">
+    <div class="brand"><span class="dot"></span> POS Mart</div>
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="pos">แคชเชียร์</button>
+      <button class="tab-btn" data-tab="products">สินค้า</button>
+      <button class="tab-btn" data-tab="sales">ยอดขาย</button>
+    </div>
+    <div style="display:flex; align-items:center; gap:10px;">
+      <span class="store-code" id="storeCodeLabel"></span>
+      <button class="reset-link" id="resetBtn">ตั้งค่าใหม่</button>
+    </div>
+  </div>
+
+  <div class="container">
+
+    <!-- ============ TAB: POS ============ -->
+    <div id="tab-pos" class="tab-panel">
+      <div class="pos-grid">
+        <div class="cart-card">
+          <div class="cart-head">
+            <div>สินค้า</div><div>ราคา</div><div>จำนวน</div><div>รวม</div><div></div>
+          </div>
+          <div id="cartBody"></div>
+        </div>
+
+        <div class="checkout-card">
+          <div class="scan-code-box">
+            <div>
+              <div class="lbl">รหัสร้าน — พิมพ์ในมือถือให้ตรงกัน</div>
+              <div class="code" id="codeBig"></div>
+            </div>
+            <div style="font-size:26px;">📶</div>
+          </div>
+
+          <div class="quick-add">
+            <input id="manualBarcode" type="text" placeholder="พิมพ์บาร์โค้ดเอง (ถ้าไม่มีมือถือ)">
+            <button class="btn-secondary" id="manualAddBtn">เพิ่ม</button>
+          </div>
+
+          <div class="led-display">
+            <div class="label">ยอดรวมสุทธิ</div>
+            <div class="amount"><small>฿</small><span id="ledTotal">0.00</span></div>
+          </div>
+
+          <div class="summary-line"><span>จำนวนรายการ</span><b id="sumCount">0</b></div>
+          <div class="summary-line"><span>จำนวนชิ้นรวม</span><b id="sumQty">0</b></div>
+
+          <button class="btn-primary" id="checkoutBtn" style="margin-bottom:10px;">💵 ชำระเงิน</button>
+          <button class="btn-secondary" id="clearCartBtn" style="width:100%;">ล้างตะกร้า</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ TAB: PRODUCTS ============ -->
+    <div id="tab-products" class="tab-panel" style="display:none;">
+      <div class="toolbar">
+        <input type="search" id="productSearch" placeholder="ค้นหาชื่อสินค้า / บาร์โค้ด">
+        <button class="btn-primary" style="width:auto;" id="addProductBtn">+ เพิ่มสินค้าใหม่</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>บาร์โค้ด</th><th>ชื่อสินค้า</th><th>ราคา</th><th>แก้ไขล่าสุด</th><th></th></tr></thead>
+          <tbody id="productsBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ============ TAB: SALES ============ -->
+    <div id="tab-sales" class="tab-panel" style="display:none;">
+      <div class="table-wrap" id="salesList"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ---- Modal: add/edit product ---- -->
+<div id="productModal" class="modal-overlay" style="display:none;">
+  <div class="modal-sheet">
+    <h3 id="pmTitle">เพิ่มสินค้าใหม่</h3>
+    <p class="hint">ข้อมูลนี้จะถูกบันทึกไว้ ครั้งต่อไปที่สแกนบาร์โค้ดนี้ ระบบจะดึงชื่อ/ราคามาให้อัตโนมัติ</p>
+    <div class="field"><label>บาร์โค้ด</label><input id="pmBarcode" type="text"></div>
+    <div class="field"><label>ชื่อสินค้า</label><input id="pmName" type="text"></div>
+    <div class="field"><label>ราคา (บาท)</label><input id="pmPrice" type="number" step="0.01" min="0"></div>
+    <div id="pmErr" class="error-msg" style="display:none;"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" id="pmCancel">ยกเลิก</button>
+      <button class="btn-primary" id="pmSave">บันทึก</button>
+    </div>
+  </div>
+</div>
+
+<!-- ---- Modal: checkout receipt ---- -->
+<div id="receiptModal" class="modal-overlay" style="display:none;">
+  <div class="modal-sheet">
+    <h3>✅ ชำระเงินสำเร็จ</h3>
+    <p class="hint">บันทึกยอดขายเรียบร้อยแล้ว</p>
+    <div id="receiptBody" style="font-family:'Space Mono',monospace; font-size:13px; line-height:1.7;"></div>
+    <div class="modal-actions">
+      <button class="btn-primary" id="receiptClose" style="width:100%;">เสร็จสิ้น</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-database-compat.js"></script>
+<script src="js/app.js"></script>
+<script src="js/cashier.js"></script>
+</body>
+</html>

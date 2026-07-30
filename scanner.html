@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>สแกนบาร์โค้ด — POS Mart</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="screen">
+  <div class="topbar">
+    <div class="brand"><span class="dot"></span> สแกนสินค้า</div>
+    <div style="display:flex; align-items:center; gap:10px;">
+      <span class="store-code" id="storeCodeLabel"></span>
+      <button class="reset-link" id="resetBtn">ตั้งค่าใหม่</button>
+    </div>
+  </div>
+
+  <div class="scanner-wrap">
+    <div id="reader"></div>
+    <button class="btn-secondary" id="toggleCamBtn" style="width:100%;margin-top:14px;">⏸ หยุดกล้องชั่วคราว</button>
+
+    <div class="card" style="margin-top:16px;">
+      <h2>หรือพิมพ์บาร์โค้ดเอง</h2>
+      <div class="quick-add">
+        <input id="manualInput" type="text" placeholder="พิมพ์บาร์โค้ด แล้วกด Enter">
+        <button class="btn-secondary" id="manualBtn">เพิ่ม</button>
+      </div>
+    </div>
+
+    <div class="recent-log" id="recentLog"></div>
+  </div>
+</div>
+
+<div id="toast" class="scan-toast"></div>
+
+<!-- ---- modal: unknown product needs name/price ---- -->
+<div id="unknownModal" class="modal-overlay" style="display:none;">
+  <div class="modal-sheet">
+    <h3 id="umTitle">ไม่พบราคาสินค้านี้</h3>
+    <p class="hint" id="umHint">กรอกข้อมูลเพื่อบันทึกไว้ใช้ครั้งต่อไป</p>
+    <div class="field"><label>บาร์โค้ด</label><input id="umBarcode" type="text" disabled></div>
+    <div class="field"><label>ชื่อสินค้า</label><input id="umName" type="text" placeholder="เช่น น้ำดื่ม 600 มล."></div>
+    <div class="field"><label>ราคา (บาท)</label><input id="umPrice" type="number" step="0.01" min="0" placeholder="0.00"></div>
+    <div id="umErr" class="error-msg" style="display:none;"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" id="umCancel">ยกเลิก</button>
+      <button class="btn-primary" id="umSave">บันทึก + เพิ่มลงตะกร้า</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-database-compat.js"></script>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="js/app.js"></script>
+<script src="js/scanner.js"></script>
+</body>
+</html>
