@@ -166,28 +166,6 @@ function escapeHtml(str){
 }
 
 /* ---------------------------------------------------------
-   Pending scans: a scan coming from the PHONE does NOT drop
-   straight into the cart — it's queued here and the CASHIER
-   computer shows a confirm/reject UI for it. Barcodes typed
-   or scanned directly ON the computer skip this and go
-   straight into the cart (see addToCart calls in cashier.js).
-   --------------------------------------------------------- */
-async function pushPendingScan(barcode, name, price){
-  const ref = storeRef('pendingScans').push();
-  await ref.set({ barcode, name, price: Number(price), qty: 1, at: nowStamp() });
-  return ref.key;
-}
-
-async function confirmPendingScan(key, item){
-  await addToCart(item.barcode, item.name, item.price, item.qty || 1);
-  await storeRef(`pendingScans/${key}`).remove();
-}
-
-async function rejectPendingScan(key){
-  await storeRef(`pendingScans/${key}`).remove();
-}
-
-/* ---------------------------------------------------------
    Build a plain-text receipt (used for the on-screen preview
    and for the downloadable .txt file on the payment screen)
    --------------------------------------------------------- */

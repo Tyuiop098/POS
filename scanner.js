@@ -51,9 +51,9 @@ if(requireRoleOrRedirect('scanner')){
     try{
       const local = await lookupLocalProduct(code);
       if(local && local.price != null){
-        await pushPendingScan(code, local.name, local.price);
-        pushRecent(local.name, local.price, 'ส่งไปแคชเชียร์แล้ว');
-        showToast(`ส่งไปแคชเชียร์แล้ว รอกดยืนยัน: ${local.name}`, 'ok');
+        await addToCart(code, local.name, local.price, 1);
+        pushRecent(local.name, local.price, 'x1');
+        showToast(`✓ เพิ่มแล้ว: ${local.name} — ฿${fmtMoney(local.price)}`, 'ok');
         return;
       }
 
@@ -92,9 +92,9 @@ if(requireRoleOrRedirect('scanner')){
         return;
       }
       await saveProduct(barcode, name, price);
-      await pushPendingScan(barcode, name, price);
-      pushRecent(name, price, 'ใหม่ — ส่งไปแคชเชียร์แล้ว');
-      showToast(`✓ บันทึกแล้ว ส่งไปแคชเชียร์แล้ว: ${name}`, 'ok');
+      await addToCart(barcode, name, price, 1);
+      pushRecent(name, price, 'x1 (ใหม่)');
+      showToast(`✓ บันทึกและเพิ่มแล้ว: ${name}`, 'ok');
       cleanup();
     };
     const cancelHandler = ()=>{

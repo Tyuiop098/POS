@@ -113,38 +113,6 @@ if(requireRoleOrRedirect('cashier')){
     });
   }
 
-  /* ---------------- pending scans (phone scanned, awaiting confirmation) ---------------- */
-  let pendingScansData = {};
-  storeRef('pendingScans').on('value', (snap)=>{
-    pendingScansData = snap.val() || {};
-    renderPendingScans();
-  });
-
-  function renderPendingScans(){
-    const area = document.getElementById('pendingScanArea');
-    const entries = Object.entries(pendingScansData);
-    if(entries.length === 0){ area.innerHTML = ''; return; }
-    area.innerHTML = entries.map(([key, it])=>`
-      <div class="pending-scan" data-key="${key}">
-        <div class="info">📱 สแกนใหม่: <span class="nm">${escapeHtml(it.name)}</span> — <span class="pr">฿${fmtMoney(it.price)}</span></div>
-        <div class="actions">
-          <button class="confirm" data-key="${key}" data-act="confirm">บันทึกรายการ</button>
-          <button class="reject" data-key="${key}" data-act="reject">ยกเลิก</button>
-        </div>
-      </div>
-    `).join('');
-  }
-
-  document.getElementById('pendingScanArea').addEventListener('click', async (e)=>{
-    const btn = e.target.closest('button[data-act]');
-    if(!btn) return;
-    const key = btn.dataset.key;
-    const item = pendingScansData[key];
-    if(!item) return;
-    if(btn.dataset.act === 'confirm') await confirmPendingScan(key, item);
-    else await rejectPendingScan(key);
-  });
-
   /* ---------------- payment screen ---------------- */
   const paymentModal = document.getElementById('paymentModal');
   const payItemsEl = document.getElementById('payItems');
